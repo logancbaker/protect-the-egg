@@ -30,7 +30,7 @@ body{font-family:var(--ui);-webkit-user-select:none;user-select:none;-webkit-tou
 #c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
 
 .hud{position:fixed;left:0;right:0;top:0;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
-  padding:calc(env(safe-area-inset-top,0px) + 12px) calc(env(safe-area-inset-right,0px) + 16px) 0 calc(env(safe-area-inset-left,0px) + 16px);pointer-events:none;font-variant-numeric:tabular-nums}
+  padding:calc(var(--sa-t,0px) + 12px) calc(var(--sa-r,0px) + 16px) 0 calc(var(--sa-l,0px) + 16px);pointer-events:none;font-variant-numeric:tabular-nums}
 [hidden]{display:none!important}
 .stat{display:grid;gap:6px}
 .score{font-family:var(--display);font-size:1.6rem;line-height:1;letter-spacing:.02em;color:var(--shell)}
@@ -84,27 +84,27 @@ h2{font-family:var(--display);font-weight:400;font-size:1.7rem;line-height:1;mar
 @keyframes ban{0%{opacity:0;transform:scale(.85)}15%{opacity:1;transform:scale(1)}75%{opacity:1}100%{opacity:0;transform:scale(1.04)}}
 
 .title .head{display:grid;gap:10px}
-/* Phones held sideways: title and Start on the left, rules on the right */
-@media (orientation:landscape) and (max-height:520px){
-  .card{width:min(640px,calc(100% - 32px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)));padding:18px 20px;gap:12px;max-height:calc(100% - 20px);overflow:auto}
-  .card.title{grid-template-columns:1fr 1.25fr;grid-template-areas:"head rules" "cta rules" "note tip";column-gap:22px;align-items:start}
-  .title .head{grid-area:head}.title .rules{grid-area:rules;gap:7px;font-size:.84rem}.title .cta{grid-area:cta}
-  .title #sensorNote{grid-area:note}.title #installNote{grid-area:tip;border-top:0;padding-top:0}
-  h1{font-size:2.1rem}
-  #banner{top:28%}
-}
-#rotate{position:fixed;inset:0;z-index:20;background:var(--void);display:grid;place-content:center;justify-items:center;gap:14px;
-  padding:24px;text-align:center}
-#rotate .phone{width:34px;height:58px;border:3px solid var(--shell);border-radius:8px;animation:turn 2.4s ease-in-out infinite}
-@keyframes turn{0%,25%{transform:rotate(0)}55%,100%{transform:rotate(-90deg)}}
-@media (prefers-reduced-motion:reduce){#rotate .phone{animation:none;transform:rotate(-90deg)}}
-#toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 20px);transform:translateX(-50%);
+/* The stage holds the whole game. On a phone the browser still thinks is upright, it is turned
+   90 degrees so the game is always sideways, even when the phone lies flat or rotation is locked. */
+#stage{position:fixed;left:0;top:0;width:100%;height:100%;overflow:hidden;transform-origin:0 0}
+/* Short and wide (a phone held sideways): title and Start on the left, rules on the right */
+#stage.short .card{width:min(640px,calc(100% - 32px - var(--sa-l,0px) - var(--sa-r,0px)));padding:18px 20px;gap:12px;max-height:calc(100% - 20px);overflow:auto}
+#stage.short .card.title{grid-template-columns:1fr 1.25fr;grid-template-areas:"head rules" "cta rules" "note tip";column-gap:22px;align-items:start}
+#stage.short .title .head{grid-area:head}
+#stage.short .title .rules{grid-area:rules;gap:7px;font-size:.84rem}
+#stage.short .title .cta{grid-area:cta}
+#stage.short .title #sensorNote{grid-area:note}
+#stage.short .title #installNote{grid-area:tip;border-top:0;padding-top:0}
+#stage.short h1{font-size:2.1rem}
+#stage.short #banner{top:28%}
+#toast{position:fixed;left:50%;bottom:calc(var(--sa-b,0px) + 20px);transform:translateX(-50%);
   width:max-content;max-width:calc(100% - 32px);box-sizing:border-box;background:var(--panel);border:1px solid rgba(255,255,255,.14);
   border-radius:10px;padding:10px 14px;font-size:.82rem;line-height:1.35;pointer-events:none;transition:opacity .3s}
 #toast.off{opacity:0}
 @media (prefers-reduced-motion:reduce){#banner.show{animation-duration:2.2s}.ammo.empty .pip{animation:none}}
 </style>
 
+<div id="stage">
 <canvas id="c" aria-label="Game arena"></canvas>
 
 <div class="hud" id="hud" hidden>
@@ -164,15 +164,9 @@ h2{font-family:var(--display);font-weight:400;font-size:1.7rem;line-height:1;mar
   <button class="cta" id="againBtn" type="button">Play again</button>
 </div>
 
-<div id="rotate" hidden>
-  <div class="phone" aria-hidden="true"></div>
-  <h2>Turn your phone sideways</h2>
-  <p class="note">Protect the Egg is played in landscape, held flat.</p>
-  <button class="ghost" id="rotateSkip" type="button">Play upright anyway</button>
-</div>
-
 <div id="banner"><div class="big" id="bannerBig">Level 1</div><div class="sub" id="bannerSub"></div></div>
 <div id="toast" class="off"></div>
+</div>
 
 <script>
 (() => {
@@ -191,10 +185,34 @@ const BASE_AMMO = 5, RELOAD = 1.0;
 // Clearing level 3 earns a 6th laser, level 4 a 7th, and so on.
 const maxAmmo = () => BASE_AMMO + Math.max(0, S.level - 3);
 
-let W = 0, H = 0, DPR = 1, U = 1, bg = null;
+let W = 0, H = 0, DPR = 1, U = 1, bg = null, turned = false;
+const stage = document.getElementById('stage');
+const probe = document.createElement('div');
+probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
+document.body.appendChild(probe);
+const SA = { Top:0, Right:0, Bottom:0, Left:0 };
+function layoutStage(){
+  const vw = innerWidth, vh = innerHeight;
+  turned = coarse && vh > vw;
+  const cs = getComputedStyle(probe), i = k => parseFloat(cs['padding' + k]) || 0;
+  if (turned){
+    // turned 90 degrees clockwise: the game's top is the phone's right edge, its left is the phone's top
+    stage.style.width = vh + 'px'; stage.style.height = vw + 'px';
+    stage.style.transform = `translateX(${vw}px) rotate(90deg)`;
+    Object.assign(SA, { Top:i('Right'), Right:i('Bottom'), Bottom:i('Left'), Left:i('Top') });
+  } else {
+    stage.style.width = stage.style.height = stage.style.transform = '';
+    Object.assign(SA, { Top:i('Top'), Right:i('Right'), Bottom:i('Bottom'), Left:i('Left') });
+  }
+  for (const [k, v] of Object.entries(SA)) stage.style.setProperty('--sa-' + k[0].toLowerCase(), v + 'px');
+  W = turned ? vh : vw; H = turned ? vw : vh;
+  stage.classList.toggle('short', W > H && H <= 520);
+}
+// Screen coordinates to game coordinates
+const toGame = (cx, cy) => turned ? { x: cy, y: innerWidth - cx } : { x: cx, y: cy };
 function resize(){
   DPR = Math.min(2, window.devicePixelRatio || 1);
-  W = innerWidth; H = innerHeight;
+  layoutStage();
   cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
   ctx.setTransform(DPR,0,0,DPR,0,0);
   U = Math.max(.8, Math.min(1.5, Math.min(W, H) / 400));
@@ -573,11 +591,7 @@ const stick = { id:null, x:0, y:0 };
 // A quick tap fires wherever the egg already points. Pressing and holding turns the point toward your finger.
 const HOLD_MS = 220;
 const presses = new Map();
-const probe = document.createElement('div');
-probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
-document.body.appendChild(probe);
-const inset = side => parseFloat(getComputedStyle(probe)['padding' + side]) || 0;
-function stickCenter(){ return { x: inset('Left') + 26*U + 58*U, y: H - 58*U - 26*U - Math.max(inset('Bottom'), parseFloat(getComputedStyle(document.documentElement).paddingBottom) || 0) }; }
+function stickCenter(){ return { x: SA.Left + 26*U + 58*U, y: H - 58*U - 26*U - SA.Bottom }; }
 const stickR = () => 58*U;
 const stickVisible = () => S.mode === 'play' && coarse && !tiltOn();
 
@@ -600,7 +614,7 @@ cv.addEventListener('pointerdown', ev => {
   ev.preventDefault();
   audioOn();
   if (S.mode !== 'play') return;
-  const x = ev.clientX, y = ev.clientY;
+  const { x, y } = toGame(ev.clientX, ev.clientY);
   if (stickVisible() && stick.id === null){
     const c = stickCenter();
     if (Math.hypot(x - c.x, y - c.y) < stickR()*1.7){
@@ -615,10 +629,11 @@ cv.addEventListener('pointerdown', ev => {
   try { cv.setPointerCapture(ev.pointerId); } catch(e){}
 });
 cv.addEventListener('pointermove', ev => {
-  if (ev.pointerId === stick.id){ updateStick(ev.clientX, ev.clientY); return; }
+  const { x, y } = toGame(ev.clientX, ev.clientY);
+  if (ev.pointerId === stick.id){ updateStick(x, y); return; }
   const press = presses.get(ev.pointerId);
   if (!press) return;
-  press.x = ev.clientX; press.y = ev.clientY;
+  press.x = x; press.y = y;
   if (press.aiming) aimAt(press.x, press.y);
 });
 function endPointer(ev, tapped){
@@ -797,7 +812,7 @@ function update(dt){
     const ACC = 1000*U;
     if (tiltOn()){
       let gx = tilt.g - tilt.ng, gy = tilt.b - tilt.nb;
-      const th = screenAngle();
+      const th = screenAngle() + (turned ? Math.PI/2 : 0);
       const sx = gx*Math.cos(th) + gy*Math.sin(th), sy = -gx*Math.sin(th) + gy*Math.cos(th);
       const dz = v => Math.abs(v) < 1.5 ? 0 : Math.max(-32, Math.min(32, v - Math.sign(v)*1.5));
       const k = TILT_LEVELS[tiltLevel].mult / 30 * ACC;
@@ -1036,19 +1051,10 @@ $('musicBtn').addEventListener('click', () => {
 $('muteBtn').addEventListener('click', () => { muted = !muted; savePref('sfxOff', muted); syncSettings(); });
 $('tiltBtn').addEventListener('click', () => { tiltLevel = (tiltLevel + 1) % TILT_LEVELS.length; savePref('tilt', tiltLevel); syncSettings(); });
 syncSettings();
-let uprightOK = false;
-function checkOrientation(){
-  const upright = coarse && innerHeight > innerWidth && !uprightOK;
-  $('rotate').hidden = !upright;
-  if (upright && S.mode === 'play') togglePause();
-}
-$('rotateSkip').addEventListener('click', () => { uprightOK = true; checkOrientation(); });
-addEventListener('resize', checkOrientation);
-addEventListener('orientationchange', () => setTimeout(checkOrientation, 200));
-checkOrientation();
+addEventListener('orientationchange', () => setTimeout(resize, 250));
 if (coarse && !installed()){
   $('installNote').innerHTML = isIOS
-    ? '<b>Full screen:</b> tap Share, then <b>Add to Home Screen</b>, and play from the icon. Turn off Portrait Orientation Lock so it can go sideways.'
+    ? '<b>Full screen:</b> tap Share, then <b>Add to Home Screen</b>, and play from the icon.'
     : '<b>Full screen:</b> Start goes full screen and locks sideways. For an app icon, open the browser menu and tap <b>Add to Home screen</b>.';
   $('installNote').hidden = false;
 }
