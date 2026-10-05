@@ -6,7 +6,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Protect Egg">
 <meta name="theme-color" content="#0c0f2e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 </head>
 <body>
 <title>Protect the Egg</title>
@@ -63,6 +67,10 @@ h2{font-family:var(--display);font-weight:400;font-size:1.7rem;line-height:1;mar
   border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:13px;cursor:pointer}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .note{font-size:.72rem;color:var(--dim);line-height:1.4;margin:0}
+.note.tip{color:var(--ink);border-top:1px solid rgba(255,255,255,.1);padding-top:12px}
+.note.tip b{color:var(--yolk)}
+.settings{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.settings .ghost{padding:12px 4px;font-size:.66rem;letter-spacing:.08em}
 .results{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-variant-numeric:tabular-nums}
 .results div{display:grid;gap:4px}
 .results b{font-size:.62rem;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
@@ -112,6 +120,7 @@ h2{font-family:var(--display);font-weight:400;font-size:1.7rem;line-height:1;mar
   </ul>
   <button class="cta" id="startBtn" type="button">Start</button>
   <p class="note" id="sensorNote">Edges wrap around. Your phone may ask to share motion data; allow it to tilt.</p>
+  <p class="note tip" id="installNote" hidden></p>
 </div>
 
 <div class="card" id="pauseCard" hidden>
@@ -120,7 +129,11 @@ h2{font-family:var(--display);font-weight:400;font-size:1.7rem;line-height:1;mar
     <button class="ghost" id="restartBtn" type="button">Restart</button>
     <button class="cta" id="resumeBtn" type="button">Resume</button>
   </div>
-  <button class="ghost" id="muteBtn" type="button">Sound: on</button>
+  <div class="settings">
+    <button class="ghost" id="musicBtn" type="button">Music: on</button>
+    <button class="ghost" id="muteBtn" type="button">Effects: on</button>
+    <button class="ghost" id="tiltBtn" type="button">Tilt: medium</button>
+  </div>
 </div>
 
 <div class="card" id="overCard" hidden>
@@ -192,8 +205,12 @@ function eachWrap(x, y, r, fn){
 }
 
 /* ---------- audio + haptics ---------- */
-let AC = null, muted = false;
+const pref = (k, d) => { try { const v = localStorage.getItem('pte-' + k); return v === null ? d : JSON.parse(v); } catch(e){ return d; } };
+const savePref = (k, v) => { try { localStorage.setItem('pte-' + k, JSON.stringify(v)); } catch(e){} };
+let AC = null, muted = pref('sfxOff', false);
 function audioOn(){
+  // iOS 17+: keep playing when the ring/silent switch is on silent
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch(e){}
   if (!AC){ try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){} }
   if (AC && AC.state === 'suspended') AC.resume().catch(()=>{});
 }
@@ -220,7 +237,138 @@ const sfx = {
   crack(){ noise(.5, .5, 900); tone(220, 40, .5, 'sawtooth', .08); },
   level(){ [523,659,784,1047].forEach((f,i) => setTimeout(() => tone(f, f*1.01, .16, 'triangle', .08), i*90)); },
 };
-const buzz = p => { try { navigator.vibrate && navigator.vibrate(p); } catch(e){} };
+
+/* ---------- music: 70s space disco, synthesized live ---------- */
+// Lead lines are written in eighth notes, 8 per bar: a note name, "-" to hold, "." for a rest.
+const TRACKS = [
+  { name:'Nebula Disco', bpm:118,
+    chords:[[57,60,64],[53,57,60],[55,59,62],[52,55,59]],                // Am  F  G  Em
+    bass:[0,null,12,null, 0,null,12,null, 0,null,12,null, 0,null,12,12],
+    arp:[0,1,2,1], hats:'open',
+    lead:'A4 . C5 E5 A5 - G5 E5 | F5 - E5 C5 A4 - C5 - | D5 . G5 - B5 - A5 G5 | E5 - - - B4 - D5 E5' },
+  { name:'Laser Funk', bpm:126,
+    chords:[[50,53,57],[46,50,53],[48,52,55],[45,49,52]],                // Dm  Bb  C  A
+    bass:[0,null,null,0, 12,null,0,null, null,0,12,null, 10,null,12,null],
+    arp:[0,2,1,2,0,2,1,2], hats:'open',
+    lead:'D5 . D5 F5 A5 . G5 F5 | F5 . D5 . Bb4 . D5 F5 | E5 . G5 . C6 - Bb5 G5 | A5 - - . C#5 . E5 G5' },
+  { name:'Orion Run', bpm:134,
+    chords:[[52,55,59],[48,52,55],[50,54,57],[47,51,54]],                // Em  C  D  B
+    bass:[0,0,12,0, 0,0,12,0, 0,0,12,0, 7,0,12,10],
+    arp:[2,1,0,1], hats:'busy',
+    lead:'E5 G5 B5 G5 E5 G5 B5 E6 | C6 - B5 G5 E5 - G5 - | D6 - C6 A5 F#5 - A5 D6 | D#6 - - - B5 . F#5 .' },
+];
+function noteNum(n){
+  const m = /^([A-G])([#b]?)(\d)$/.exec(n);
+  return { C:0, D:2, E:4, F:5, G:7, A:9, B:11 }[m[1]] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0) + 12*(+m[3] + 1);
+}
+for (const T of TRACKS){
+  T.events = {};
+  let last = null;
+  T.lead.split(/\s+/).filter(t => t && t !== '|').forEach((tok, i) => {
+    const step = i*2;
+    if (tok === '-' && last) last.len += 2;
+    else if (tok === '.') last = null;
+    else if (tok !== '-'){ last = { n:noteNum(tok), len:2 }; T.events[step] = last; }
+  });
+}
+const hz = m => 440 * Math.pow(2, (m - 69) / 12);
+const M = { on: !pref('musicOff', false), playing:false, track:0, pending:0, step:0, next:0, loop:0, bus:null, timer:null, nbuf:null };
+
+function musicStart(t){
+  if (typeof t === 'number') M.pending = t;
+  if (!AC || !M.on || M.playing) return;
+  if (!M.bus){
+    M.bus = AC.createGain(); M.bus.gain.value = 0;
+    const comp = AC.createDynamicsCompressor();
+    M.bus.connect(comp); comp.connect(AC.destination);
+    M.nbuf = AC.createBuffer(1, AC.sampleRate, AC.sampleRate);
+    const d = M.nbuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random()*2 - 1;
+  }
+  M.playing = true; M.track = M.pending; M.step = 0; M.loop = 0; M.next = AC.currentTime + .08;
+  M.bus.gain.cancelScheduledValues(AC.currentTime);
+  M.bus.gain.setTargetAtTime(.5, AC.currentTime, .15);
+  clearInterval(M.timer); M.timer = setInterval(schedule, 25);
+}
+function musicStop(){
+  if (!M.playing) return;
+  M.playing = false; clearInterval(M.timer);
+  M.bus.gain.cancelScheduledValues(AC.currentTime);
+  M.bus.gain.setTargetAtTime(0, AC.currentTime, .12);
+}
+function schedule(){
+  while (M.next < AC.currentTime + .15){
+    if (M.step % 16 === 0 && M.pending !== M.track){ M.track = M.pending; M.step = 0; M.loop = 0; }
+    const T = TRACKS[M.track], sp = 60 / T.bpm / 4;
+    playStep(T, M.step, M.next, sp);
+    M.next += sp;
+    if (++M.step >= 64){ M.step = 0; M.loop++; }
+  }
+}
+function playStep(T, s, t, sp){
+  const bar = s >> 4, st = s & 15, chord = T.chords[bar];
+  if (st % 4 === 0) kick(t);
+  if (st === 4 || st === 12) noiseHit(t, .16, 'bandpass', 1500, .32, 1.2);              // clap
+  if (st % 4 === 2) noiseHit(t, .1, 'highpass', 7500, .13);                              // open hat
+  else if (T.hats === 'busy' || st % 2 === 1) noiseHit(t, .03, 'highpass', 9000, .05);   // closed hat
+  const b = T.bass[st];
+  if (b !== null) bass(hz(36 + chord[0] % 12 + b), t, sp*1.7);
+  if (st === 0) pad(chord, t, sp*16);
+  const a = chord[T.arp[s % T.arp.length] % chord.length] + 12;
+  if (st % 2 === 0 || T.hats === 'busy') pluck(hz(a), t);
+  const ev = T.events[s];
+  if (ev && M.loop % 2 === 1) lead(hz(ev.n), t, ev.len*sp);
+  if (bar === 3 && st === 14) syndrum(t);                                                // the 70s "pew"
+  if (bar === 3 && st === 0 && M.loop % 2 === 0) riser(t, sp*16);
+}
+function envGain(t, a, peak, d){
+  const g = AC.createGain();
+  g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(.0001, t + a + d);
+  g.connect(M.bus); return g;
+}
+function osc(type, f, t, end, dest){ const o = AC.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, t); o.connect(dest); o.start(t); o.stop(end); return o; }
+function kick(t){ const o = osc('sine', 140, t, t + .32, envGain(t, .003, .9, .28)); o.frequency.exponentialRampToValueAtTime(42, t + .14); }
+function noiseHit(t, dur, type, f, peak, q){
+  const s = AC.createBufferSource(), fl = AC.createBiquadFilter();
+  s.buffer = M.nbuf; fl.type = type; fl.frequency.value = f; if (q) fl.Q.value = q;
+  s.connect(fl); fl.connect(envGain(t, .002, peak, dur)); s.start(t, Math.random()*.5); s.stop(t + dur + .05);
+}
+function bass(f, t, d){
+  const fl = AC.createBiquadFilter(); fl.type = 'lowpass'; fl.Q.value = 6;
+  fl.frequency.setValueAtTime(2000, t); fl.frequency.exponentialRampToValueAtTime(260, t + d);
+  fl.connect(envGain(t, .005, .26, d)); osc('sawtooth', f, t, t + d + .05, fl);
+}
+function pad(chord, t, d){
+  const fl = AC.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = 1100;
+  const g = AC.createGain(); g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(.05, t + .35);
+  g.gain.setValueAtTime(.05, t + d - .25); g.gain.linearRampToValueAtTime(.0001, t + d + .1);
+  fl.connect(g); g.connect(M.bus);
+  for (const n of chord) for (const det of [-8, 8]){ const o = osc('sawtooth', hz(n), t, t + d + .15, fl); o.detune.value = det; }
+}
+function pluck(f, t){
+  const fl = AC.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = 2600;
+  fl.connect(envGain(t, .002, .045, .13)); osc('square', f, t, t + .16, fl);
+}
+function lead(f, t, d){
+  const fl = AC.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = 3200;
+  const g = AC.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.075, t + .02);
+  g.gain.setValueAtTime(.075, t + d*.9); g.gain.linearRampToValueAtTime(0, t + d + .08);
+  fl.connect(g); g.connect(M.bus);
+  const lfo = AC.createOscillator(), depth = AC.createGain(); lfo.frequency.value = 5.5; depth.gain.value = 9;
+  lfo.connect(depth); lfo.start(t); lfo.stop(t + d + .1);
+  for (const [type, mult] of [['square', 1], ['sawtooth', 1.004]]){ const o = osc(type, f*mult, t, t + d + .1, fl); depth.connect(o.detune); }
+}
+function syndrum(t){
+  const o = osc('sine', 1100, t, t + .4, envGain(t, .002, .22, .35));
+  o.frequency.exponentialRampToValueAtTime(160, t + .35);
+}
+function riser(t, d){
+  const s = AC.createBufferSource(), fl = AC.createBiquadFilter();
+  s.buffer = M.nbuf; s.loop = true; fl.type = 'bandpass'; fl.Q.value = 3;
+  fl.frequency.setValueAtTime(300, t); fl.frequency.exponentialRampToValueAtTime(7000, t + d);
+  const g = AC.createGain(); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.12, t + d*.95); g.gain.linearRampToValueAtTime(0, t + d);
+  s.connect(fl); fl.connect(g); g.connect(M.bus); s.start(t); s.stop(t + d + .02);
+}
+const buzz = p =>{ try { navigator.vibrate && navigator.vibrate(p); } catch(e){} };
 
 /* ---------- tilt ---------- */
 const tilt = { b:0, g:0, nb:0, ng:0, last:0, listening:false };
@@ -228,6 +376,9 @@ function onOrient(e){
   if (e.beta == null || e.gamma == null) return;
   tilt.b = e.beta; tilt.g = e.gamma; tilt.last = performance.now();
 }
+// The first release felt like "high"; medium is the new default.
+const TILT_LEVELS = [{ name:'low', mult:.5 }, { name:'medium', mult:.7 }, { name:'high', mult:1 }];
+let tiltLevel = Math.max(0, Math.min(2, pref('tilt', 1)));
 const tiltOn = () => performance.now() - tilt.last < 1500;
 function listenTilt(){ if (!tilt.listening){ addEventListener('deviceorientation', onOrient); tilt.listening = true; } }
 function enableTilt(){
@@ -335,12 +486,26 @@ function startLevel(){
   S.bullets = [];
   S.egg.inv = Math.max(S.egg.inv, 1.4);
   banner(`Level ${S.level}`, describe(S.level));
+  musicStart((S.level - 1) % TRACKS.length);
   updateHud();
+}
+
+/* ---------- full screen ---------- */
+const isIOS = /iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const installed = () => matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone === true;
+function goFullscreen(){
+  if (!coarse || installed() || document.fullscreenElement || document.webkitFullscreenElement) return;
+  const el = document.documentElement, rf = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (!rf) return;
+  try {
+    const p = rf.call(el, { navigationUI:'hide' });
+    if (p && p.then) p.then(() => { try { screen.orientation.lock('portrait').catch(()=>{}); } catch(e){} }).catch(()=>{});
+  } catch(e){}
 }
 
 /* ---------- flow ---------- */
 function startGame(){
-  audioOn(); enableTilt(); wake();
+  goFullscreen(); audioOn(); enableTilt(); wake();
   S.level = 1; S.score = 0; S.lives = 3; S.ammo = MAX_AMMO; S.reload = 0; S.parts = []; S.splat = null;
   S.egg = newEgg();
   S.mode = 'play';
@@ -382,13 +547,14 @@ function afterDeath(){
     $('rBest').textContent = S.best.toLocaleString();
     $('rBest').classList.toggle('new', isBest);
     $('hud').hidden = true;
+    musicStop();
     show('overCard');
     S.balls.forEach(b => b.demo = true);
   }
 }
 function togglePause(){
-  if (S.mode === 'play'){ S.mode = 'paused'; show('pauseCard'); }
-  else if (S.mode === 'paused'){ S.mode = 'play'; show(null); audioOn(); }
+  if (S.mode === 'play'){ S.mode = 'paused'; show('pauseCard'); musicStop(); }
+  else if (S.mode === 'paused'){ S.mode = 'play'; show(null); goFullscreen(); audioOn(); musicStart(); }
 }
 function show(id){ for (const c of ['titleCard','pauseCard','overCard']) $(c).hidden = c !== id; }
 
@@ -439,7 +605,8 @@ function update(dt){
       const th = screenAngle();
       const sx = gx*Math.cos(th) + gy*Math.sin(th), sy = -gx*Math.sin(th) + gy*Math.cos(th);
       const dz = v => Math.abs(v) < 1.5 ? 0 : Math.max(-32, Math.min(32, v - Math.sign(v)*1.5));
-      ax += dz(sx)/30 * ACC; ay += dz(sy)/30 * ACC;
+      const k = TILT_LEVELS[tiltLevel].mult / 30 * ACC;
+      ax += dz(sx) * k; ay += dz(sy) * k;
     }
     ax += stick.x * ACC; ay += stick.y * ACC;
     const kx = (keys['d']||keys['arrowright']?1:0) - (keys['a']||keys['arrowleft']?1:0);
@@ -646,7 +813,25 @@ $('pauseBtn').addEventListener('click', togglePause);
 $('resumeBtn').addEventListener('click', togglePause);
 $('restartBtn').addEventListener('click', startGame);
 $('recenter').addEventListener('click', () => { tilt.nb = tilt.b; tilt.ng = tilt.g; toast('Current angle is now level.'); });
-$('muteBtn').addEventListener('click', () => { muted = !muted; $('muteBtn').textContent = `Sound: ${muted ? 'off' : 'on'}`; });
+function syncSettings(){
+  $('musicBtn').textContent = `Music: ${M.on ? 'on' : 'off'}`;
+  $('muteBtn').textContent = `Effects: ${muted ? 'off' : 'on'}`;
+  $('tiltBtn').textContent = `Tilt: ${TILT_LEVELS[tiltLevel].name}`;
+}
+$('musicBtn').addEventListener('click', () => {
+  M.on = !M.on; savePref('musicOff', !M.on);
+  if (!M.on) musicStop();
+  syncSettings();
+});
+$('muteBtn').addEventListener('click', () => { muted = !muted; savePref('sfxOff', muted); syncSettings(); });
+$('tiltBtn').addEventListener('click', () => { tiltLevel = (tiltLevel + 1) % TILT_LEVELS.length; savePref('tilt', tiltLevel); syncSettings(); });
+syncSettings();
+if (coarse && !installed()){
+  $('installNote').innerHTML = isIOS
+    ? '<b>Full screen:</b> tap Share, then <b>Add to Home Screen</b>, and play from the icon.'
+    : '<b>Full screen:</b> Start goes full screen. For an app icon, open the browser menu and tap <b>Add to Home screen</b>.';
+  $('installNote').hidden = false;
+}
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && S.mode === 'play') togglePause();
   if (!document.hidden && S.mode !== 'title') wake();
