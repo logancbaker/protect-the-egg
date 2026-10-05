@@ -30,12 +30,12 @@ body{font-family:var(--ui);-webkit-user-select:none;user-select:none;-webkit-tou
 #c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
 
 .hud{position:fixed;left:0;right:0;top:0;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
-  padding:calc(env(safe-area-inset-top,0px) + 12px) 16px 0;pointer-events:none;font-variant-numeric:tabular-nums}
+  padding:calc(env(safe-area-inset-top,0px) + 12px) calc(env(safe-area-inset-right,0px) + 16px) 0 calc(env(safe-area-inset-left,0px) + 16px);pointer-events:none;font-variant-numeric:tabular-nums}
 [hidden]{display:none!important}
 .stat{display:grid;gap:6px}
 .score{font-family:var(--display);font-size:1.6rem;line-height:1;letter-spacing:.02em;color:var(--shell)}
 .lvl{font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);font-weight:700}
-.ammo{display:flex;gap:5px;align-items:center}
+.ammo{display:flex;flex-wrap:wrap;gap:5px;align-items:center;max-width:189px}
 .pip{position:relative;width:16px;height:7px;border-radius:4px;background:rgba(255,61,110,.18);overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,61,110,.45)}
 .pip i{position:absolute;inset:0;width:var(--f,0%);background:var(--laser);box-shadow:0 0 8px var(--laser)}
 .ammo.empty .pip{animation:shake .25s}
@@ -83,6 +83,21 @@ h2{font-family:var(--display);font-weight:400;font-size:1.7rem;line-height:1;mar
 #banner .sub{font-size:.8rem;letter-spacing:.18em;text-transform:uppercase;color:var(--yolk);font-weight:700}
 @keyframes ban{0%{opacity:0;transform:scale(.85)}15%{opacity:1;transform:scale(1)}75%{opacity:1}100%{opacity:0;transform:scale(1.04)}}
 
+.title .head{display:grid;gap:10px}
+/* Phones held sideways: title and Start on the left, rules on the right */
+@media (orientation:landscape) and (max-height:520px){
+  .card{width:min(640px,calc(100% - 32px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)));padding:18px 20px;gap:12px;max-height:calc(100% - 20px);overflow:auto}
+  .card.title{grid-template-columns:1fr 1.25fr;grid-template-areas:"head rules" "cta rules" "note tip";column-gap:22px;align-items:start}
+  .title .head{grid-area:head}.title .rules{grid-area:rules;gap:7px;font-size:.84rem}.title .cta{grid-area:cta}
+  .title #sensorNote{grid-area:note}.title #installNote{grid-area:tip;border-top:0;padding-top:0}
+  h1{font-size:2.1rem}
+  #banner{top:28%}
+}
+#rotate{position:fixed;inset:0;z-index:20;background:var(--void);display:grid;place-content:center;justify-items:center;gap:14px;
+  padding:24px;text-align:center}
+#rotate .phone{width:34px;height:58px;border:3px solid var(--shell);border-radius:8px;animation:turn 2.4s ease-in-out infinite}
+@keyframes turn{0%,25%{transform:rotate(0)}55%,100%{transform:rotate(-90deg)}}
+@media (prefers-reduced-motion:reduce){#rotate .phone{animation:none;transform:rotate(-90deg)}}
 #toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 20px);transform:translateX(-50%);
   width:max-content;max-width:calc(100% - 32px);box-sizing:border-box;background:var(--panel);border:1px solid rgba(255,255,255,.14);
   border-radius:10px;padding:10px 14px;font-size:.82rem;line-height:1.35;pointer-events:none;transition:opacity .3s}
@@ -97,7 +112,6 @@ h2{font-family:var(--display);font-weight:400;font-size:1.7rem;line-height:1;mar
     <div class="score" id="score">0</div>
     <div class="lvl" id="lvl">Level 1</div>
     <div class="ammo" id="ammo" aria-label="Lasers">
-      <div class="pip"><i></i></div><div class="pip"><i></i></div><div class="pip"><i></i></div><div class="pip"><i></i></div><div class="pip"><i></i></div>
     </div>
   </div>
   <div class="right">
@@ -109,17 +123,20 @@ h2{font-family:var(--display);font-weight:400;font-size:1.7rem;line-height:1;mar
   </div>
 </div>
 
-<div class="card" id="titleCard">
-  <div class="eyebrow">An iPhone game from 2008, rebuilt</div>
-  <h1>Protect<br>the <span>Egg</span></h1>
+<div class="card title" id="titleCard">
+  <div class="head">
+    <div class="eyebrow">An iPhone game from 2008, rebuilt</div>
+    <h1>Protect<br>the <span>Egg</span></h1>
+  </div>
   <ul class="rules">
-    <li><b>Move</b><span id="moveHint">Hold the phone flat and tilt it to roll the egg.</span></li>
-    <li><b>Shoot</b><span id="shootHint">Tap anywhere. The pointy end turns to your finger and fires.</span></li>
-    <li><b>Lasers</b><span>Five shots. One reloads every second.</span></li>
+    <li><b>Move</b><span id="moveHint">Turn your phone sideways, hold it flat, and tilt to roll the egg.</span></li>
+    <li><b>Shoot</b><span id="shootHint">Tap anywhere to fire from the pointy end.</span></li>
+    <li><b>Aim</b><span id="aimHint">Press and hold. The point turns toward your finger.</span></li>
+    <li><b>Lasers</b><span>Five shots, one reloads every second. Clear level 3 and up to earn more.</span></li>
     <li><b>Balls</b><span>Clear them all. Colored balls take more hits. One touch cracks you.</span></li>
   </ul>
   <button class="cta" id="startBtn" type="button">Start</button>
-  <p class="note" id="sensorNote">Edges wrap around. Your phone may ask to share motion data; allow it to tilt.</p>
+  <p class="note" id="sensorNote">Edges wrap around. If your phone asks to share motion data, allow it so tilt works.</p>
   <p class="note tip" id="installNote" hidden></p>
 </div>
 
@@ -147,6 +164,13 @@ h2{font-family:var(--display);font-weight:400;font-size:1.7rem;line-height:1;mar
   <button class="cta" id="againBtn" type="button">Play again</button>
 </div>
 
+<div id="rotate" hidden>
+  <div class="phone" aria-hidden="true"></div>
+  <h2>Turn your phone sideways</h2>
+  <p class="note">Protect the Egg is played in landscape, held flat.</p>
+  <button class="ghost" id="rotateSkip" type="button">Play upright anyway</button>
+</div>
+
 <div id="banner"><div class="big" id="bannerBig">Level 1</div><div class="sub" id="bannerSub"></div></div>
 <div id="toast" class="off"></div>
 
@@ -163,7 +187,9 @@ const HP = [
   ['#ffd4b8','#ff7a2e','#7f2800'],
   ['#efd6ff','#b45cff','#43177a'],
 ];
-const MAX_AMMO = 5, RELOAD = 1.0;
+const BASE_AMMO = 5, RELOAD = 1.0;
+// Clearing level 3 earns a 6th laser, level 4 a 7th, and so on.
+const maxAmmo = () => BASE_AMMO + Math.max(0, S.level - 3);
 
 let W = 0, H = 0, DPR = 1, U = 1, bg = null;
 function resize(){
@@ -187,7 +213,7 @@ function resize(){
 }
 
 /* ---------- state ---------- */
-const S = { mode:'title', level:1, score:0, lives:3, best:0, egg:null, balls:[], bullets:[], parts:[], splat:null, ammo:MAX_AMMO, reload:0, timer:0, shake:0 };
+const S = { mode:'title', level:1, score:0, lives:3, best:0, egg:null, balls:[], bullets:[], parts:[], splat:null, ammo:BASE_AMMO, reload:0, timer:0, shake:0 };
 try { S.best = +localStorage.getItem('pte-best') || 0; } catch(e){}
 
 function newEgg(){ return { x:W/2, y:H/2, vx:0, vy:0, ang:-Math.PI/2, target:-Math.PI/2, inv:2.2, r:15*U }; }
@@ -544,9 +570,14 @@ function screenAngle(){
 /* ---------- input ---------- */
 const keys = {};
 const stick = { id:null, x:0, y:0 };
-const aimers = new Set();
-function stickCenter(){ return { x: 26*U + 58*U, y: H - 58*U - 34*U - safeBottom() }; }
-function safeBottom(){ return parseFloat(getComputedStyle(document.documentElement).paddingBottom) || 0; }
+// A quick tap fires wherever the egg already points. Pressing and holding turns the point toward your finger.
+const HOLD_MS = 220;
+const presses = new Map();
+const probe = document.createElement('div');
+probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
+document.body.appendChild(probe);
+const inset = side => parseFloat(getComputedStyle(probe)['padding' + side]) || 0;
+function stickCenter(){ return { x: inset('Left') + 26*U + 58*U, y: H - 58*U - 26*U - Math.max(inset('Bottom'), parseFloat(getComputedStyle(document.documentElement).paddingBottom) || 0) }; }
 const stickR = () => 58*U;
 const stickVisible = () => S.mode === 'play' && coarse && !tiltOn();
 
@@ -578,20 +609,28 @@ cv.addEventListener('pointerdown', ev => {
       return;
     }
   }
-  aimers.add(ev.pointerId);
+  const press = { x, y, aiming:false };
+  press.timer = setTimeout(() => { press.aiming = true; aimAt(press.x, press.y); buzz(8); }, HOLD_MS);
+  presses.set(ev.pointerId, press);
   try { cv.setPointerCapture(ev.pointerId); } catch(e){}
-  aimAt(x, y); fire();
 });
 cv.addEventListener('pointermove', ev => {
   if (ev.pointerId === stick.id){ updateStick(ev.clientX, ev.clientY); return; }
-  if (aimers.has(ev.pointerId) || ev.pointerType === 'mouse') aimAt(ev.clientX, ev.clientY);
+  const press = presses.get(ev.pointerId);
+  if (!press) return;
+  press.x = ev.clientX; press.y = ev.clientY;
+  if (press.aiming) aimAt(press.x, press.y);
 });
-function endPointer(ev){
+function endPointer(ev, tapped){
   if (ev.pointerId === stick.id){ stick.id = null; stick.x = stick.y = 0; }
-  aimers.delete(ev.pointerId);
+  const press = presses.get(ev.pointerId);
+  if (!press) return;
+  clearTimeout(press.timer);
+  presses.delete(ev.pointerId);
+  if (tapped && !press.aiming) fire();
 }
-cv.addEventListener('pointerup', endPointer);
-cv.addEventListener('pointercancel', endPointer);
+cv.addEventListener('pointerup', ev => endPointer(ev, true));
+cv.addEventListener('pointercancel', ev => endPointer(ev, false));
 function updateStick(x, y){
   const c = stickCenter(), r = stickR();
   let dx = (x - c.x) / r, dy = (y - c.y) / r;
@@ -626,7 +665,8 @@ function spawnBalls(level, avoid){
 }
 function describe(level){
   const tougher = level >= 2 ? (level >= 6 ? 'Tough shells everywhere' : 'Some balls take extra hits') : 'One hit each';
-  return `${Math.min(3+level,18)} balls · ${tougher}`;
+  const lasers = maxAmmo() > BASE_AMMO ? ` · ${maxAmmo()} lasers` : '';
+  return `${Math.min(3+level,18)} balls · ${tougher}${lasers}`;
 }
 function startLevel(){
   S.balls = spawnBalls(S.level, S.egg);
@@ -646,14 +686,14 @@ function goFullscreen(){
   if (!rf) return;
   try {
     const p = rf.call(el, { navigationUI:'hide' });
-    if (p && p.then) p.then(() => { try { screen.orientation.lock('portrait').catch(()=>{}); } catch(e){} }).catch(()=>{});
+    if (p && p.then) p.then(() => { try { screen.orientation.lock('landscape').catch(()=>{}); } catch(e){} }).catch(()=>{});
   } catch(e){}
 }
 
 /* ---------- flow ---------- */
 function startGame(){
   goFullscreen(); audioOn(); enableTilt(); wake();
-  S.level = 1; S.score = 0; S.lives = 3; S.ammo = MAX_AMMO; S.reload = 0; S.parts = []; S.splat = null;
+  S.level = 1; S.score = 0; S.lives = 3; S.ammo = BASE_AMMO; S.reload = 0; S.parts = []; S.splat = null;
   S.egg = newEgg();
   musicMuffle(false);
   S.mode = 'play';
@@ -664,7 +704,7 @@ function startGame(){
     if (S.mode !== 'play') return;
     if (tiltOn()) toast('Tilt is on. Tap Recenter to make your current angle level.');
     else if (coarse) toast('Tilt sensor isn’t available here. Use the thumb-stick, bottom left.');
-    else toast('Move with WASD or arrow keys. Aim with the mouse, click or Space to fire.');
+    else toast('Move with WASD or the arrow keys. Click or Space fires. Hold and drag to aim.');
   }, 1300);
 }
 function die(){
@@ -683,7 +723,7 @@ function die(){
 function afterDeath(){
   if (S.lives > 0){
     S.splat = null; musicMuffle(false);
-    S.egg = newEgg(); S.egg.inv = 2.6; S.mode = 'play'; S.ammo = MAX_AMMO;
+    S.egg = newEgg(); S.egg.inv = 2.6; S.mode = 'play'; S.ammo = maxAmmo();
     // nudge balls away from the respawn point
     for (const b of S.balls){ if (wdist(b.x,b.y,S.egg.x,S.egg.y) < 110*U){ b.x = (b.x + W/2) % W; } }
   } else {
@@ -720,7 +760,13 @@ let lock = null;
 function wake(){ try { if (navigator.wakeLock && !lock) navigator.wakeLock.request('screen').then(l => { lock = l; l.addEventListener('release', () => lock = null); }).catch(()=>{}); } catch(e){} }
 
 /* ---------- HUD ---------- */
-const pips = [...document.querySelectorAll('.pip i')];
+let pips = [];
+function buildPips(){
+  const n = maxAmmo();
+  if (pips.length === n) return;
+  $('ammo').innerHTML = '<div class="pip"><i></i></div>'.repeat(n);
+  pips = [...$('ammo').querySelectorAll('.pip i')];
+}
 let lastScore = -1, lastLives = -1, lastLevel = -1;
 function updateHud(){
   if (S.score !== lastScore){ $('score').textContent = S.score.toLocaleString(); lastScore = S.score; }
@@ -732,6 +778,7 @@ function updateHud(){
 }
 let lastLeft = -1;
 function hudFrame(){
+  buildPips();
   pips.forEach((p, i) => {
     const f = i < Math.floor(S.ammo) ? 100 : (i === Math.floor(S.ammo) ? S.reload/RELOAD*30 : 0);
     p.style.setProperty('--f', f + '%');
@@ -774,7 +821,7 @@ function update(dt){
   }
 
   if (playing){
-    if (S.ammo < MAX_AMMO){ S.reload += dt; if (S.reload >= RELOAD){ S.ammo++; S.reload -= RELOAD; } }
+    if (S.ammo < maxAmmo()){ S.reload += dt; if (S.reload >= RELOAD){ S.ammo++; S.reload -= RELOAD; } }
     else S.reload = 0;
   }
 
@@ -814,11 +861,11 @@ function update(dt){
   if (playing && S.balls.length === 0){
     S.mode = 'clear'; S.timer = 1.8;
     const bonus = 250*S.level; S.score += bonus;
-    banner('Cleared', `+${bonus.toLocaleString()} bonus`);
+    banner('Cleared', `+${bonus.toLocaleString()} bonus` + (S.level >= 3 ? ' · +1 laser' : ''));
     sfx.level(); buzz([20,40,20]);
   }
 
-  if (S.mode === 'clear'){ S.timer -= dt; if (S.timer <= 0){ S.level++; S.mode = 'play'; S.ammo = MAX_AMMO; startLevel(); } }
+  if (S.mode === 'clear'){ S.timer -= dt; if (S.timer <= 0){ S.level++; S.mode = 'play'; S.ammo = maxAmmo(); startLevel(); } }
   if (S.splat){ const s = S.splat; s.t += dt; s.x += s.vx*dt; s.y += s.vy*dt; s.rot += s.vr*dt; wrap(s); }
   if (S.mode === 'dying'){ S.timer -= dt; if (S.timer <= 0) afterDeath(); }
 
@@ -949,7 +996,14 @@ function draw(){
     } else { ctx.beginPath(); ctx.arc(p.x, p.y, p.s, 0, TAU); ctx.fill(); }
   }
   ctx.globalAlpha = 1;
-  if (stickVisible()) { ctx.setTransform(DPR,0,0,DPR,0,0); drawStick(); }
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  if (stickVisible()) drawStick();
+  if (S.mode === 'play') for (const p of presses.values()){
+    if (!p.aiming) continue;
+    ctx.strokeStyle = 'rgba(255,61,110,.75)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 16*U, 0, TAU); ctx.stroke();
+    ctx.beginPath(); ctx.arc(p.x, p.y, 3*U, 0, TAU); ctx.fillStyle = 'rgba(255,61,110,.9)'; ctx.fill();
+  }
 }
 
 /* ---------- loop ---------- */
@@ -982,10 +1036,20 @@ $('musicBtn').addEventListener('click', () => {
 $('muteBtn').addEventListener('click', () => { muted = !muted; savePref('sfxOff', muted); syncSettings(); });
 $('tiltBtn').addEventListener('click', () => { tiltLevel = (tiltLevel + 1) % TILT_LEVELS.length; savePref('tilt', tiltLevel); syncSettings(); });
 syncSettings();
+let uprightOK = false;
+function checkOrientation(){
+  const upright = coarse && innerHeight > innerWidth && !uprightOK;
+  $('rotate').hidden = !upright;
+  if (upright && S.mode === 'play') togglePause();
+}
+$('rotateSkip').addEventListener('click', () => { uprightOK = true; checkOrientation(); });
+addEventListener('resize', checkOrientation);
+addEventListener('orientationchange', () => setTimeout(checkOrientation, 200));
+checkOrientation();
 if (coarse && !installed()){
   $('installNote').innerHTML = isIOS
-    ? '<b>Full screen:</b> tap Share, then <b>Add to Home Screen</b>, and play from the icon.'
-    : '<b>Full screen:</b> Start goes full screen. For an app icon, open the browser menu and tap <b>Add to Home screen</b>.';
+    ? '<b>Full screen:</b> tap Share, then <b>Add to Home Screen</b>, and play from the icon. Turn off Portrait Orientation Lock so it can go sideways.'
+    : '<b>Full screen:</b> Start goes full screen and locks sideways. For an app icon, open the browser menu and tap <b>Add to Home screen</b>.';
   $('installNote').hidden = false;
 }
 document.addEventListener('visibilitychange', () => {
@@ -996,8 +1060,9 @@ addEventListener('resize', resize);
 
 if (!coarse){
   $('moveHint').textContent = 'On a phone, tilt to roll. Here, use WASD or the arrow keys.';
-  $('shootHint').textContent = 'Point with the mouse, then click or press Space to fire.';
-  $('sensorNote').textContent = 'Edges wrap around. Best on a phone held flat. Press P to pause.';
+  $('shootHint').textContent = 'Click or press Space to fire from the pointy end.';
+  $('aimHint').textContent = 'Hold the mouse button and drag. The point follows.';
+  $('sensorNote').textContent = 'Edges wrap around. Best on a phone held sideways and flat. Press P to pause.';
 }
 
 resize();
