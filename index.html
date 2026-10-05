@@ -84,6 +84,8 @@ h2{font-family:var(--display);font-weight:400;font-size:1.7rem;line-height:1;mar
 @keyframes ban{0%{opacity:0;transform:scale(.85)}15%{opacity:1;transform:scale(1)}75%{opacity:1}100%{opacity:0;transform:scale(1.04)}}
 
 .title .head{display:grid;gap:10px}
+.actions{display:grid;gap:10px}
+#calibrateNote.done{color:var(--yolk)}
 /* The stage holds the whole game. On a phone the browser still thinks is upright, it is turned
    90 degrees so the game is always sideways, even when the phone lies flat or rotation is locked. */
 #stage{position:fixed;left:0;top:0;width:100%;height:100%;overflow:hidden;transform-origin:0 0}
@@ -92,7 +94,8 @@ h2{font-family:var(--display);font-weight:400;font-size:1.7rem;line-height:1;mar
 #stage.short .card.title{grid-template-columns:1fr 1.25fr;grid-template-areas:"head rules" "cta rules" "note tip";column-gap:22px;align-items:start}
 #stage.short .title .head{grid-area:head}
 #stage.short .title .rules{grid-area:rules;gap:7px;font-size:.84rem}
-#stage.short .title .cta{grid-area:cta}
+#stage.short .title .actions{grid-area:cta;gap:8px}
+#stage.short .title .actions .ghost{padding:10px}
 #stage.short .title #sensorNote{grid-area:note}
 #stage.short .title #installNote{grid-area:tip;border-top:0;padding-top:0}
 #stage.short h1{font-size:2.1rem}
@@ -135,7 +138,11 @@ h2{font-family:var(--display);font-weight:400;font-size:1.7rem;line-height:1;mar
     <li><b>Lasers</b><span>Five shots, one reloads every second. Clear level 3 and up to earn more.</span></li>
     <li><b>Balls</b><span>Clear them all. Colored balls take more hits. One touch cracks you.</span></li>
   </ul>
-  <button class="cta" id="startBtn" type="button">Start</button>
+  <div class="actions">
+    <button class="cta" id="startBtn" type="button">Start</button>
+    <button class="ghost" id="calibrateBtn" type="button">Calibrate tilt</button>
+    <p class="note" id="calibrateNote">Hold your phone the way you'll play, then tap Calibrate tilt.</p>
+  </div>
   <p class="note" id="sensorNote">Edges wrap around. If your phone asks to share motion data, allow it so tilt works.</p>
   <p class="note tip" id="installNote" hidden></p>
 </div>
@@ -1037,7 +1044,27 @@ $('againBtn').addEventListener('click', startGame);
 $('pauseBtn').addEventListener('click', togglePause);
 $('resumeBtn').addEventListener('click', togglePause);
 $('restartBtn').addEventListener('click', startGame);
-$('recenter').addEventListener('click', () => { tilt.nb = tilt.b; tilt.ng = tilt.g; toast('Current angle is now level.'); });
+// Calibration: whatever angle the phone is held at becomes "level". Remembered between games.
+const savedZero = pref('tiltZero', null);
+if (Array.isArray(savedZero)){ tilt.nb = savedZero[0]; tilt.ng = savedZero[1]; }
+function setLevel(){ tilt.nb = tilt.b; tilt.ng = tilt.g; savePref('tiltZero', [tilt.b, tilt.g]); }
+$('recenter').addEventListener('click', () => { setLevel(); toast('Current angle is now level.'); });
+$('calibrateBtn').addEventListener('click', () => {
+  enableTilt();                       // asks for motion access on iPhone the first time
+  const note = $('calibrateNote');
+  note.classList.remove('done'); note.textContent = 'Reading the tilt sensor…';
+  let tries = 0;
+  (function attempt(){
+    if (tiltOn()){
+      setLevel(); buzz(15);
+      note.classList.add('done'); note.textContent = 'Calibrated. This angle now counts as level.';
+      $('calibrateBtn').textContent = 'Recalibrate';
+    } else if (++tries < 20) setTimeout(attempt, 100);
+    else note.textContent = 'No tilt sensor found. If your phone asked for motion access, allow it and try again.';
+  })();
+});
+if (!coarse){ $('calibrateBtn').hidden = true; $('calibrateNote').hidden = true; }
+else if (Array.isArray(savedZero)){ $('calibrateBtn').textContent = 'Recalibrate'; $('calibrateNote').textContent = 'Using your saved calibration. Recalibrate any time.'; }
 function syncSettings(){
   $('musicBtn').textContent = `Music: ${M.on ? 'on' : 'off'}`;
   $('muteBtn').textContent = `Effects: ${muted ? 'off' : 'on'}`;
