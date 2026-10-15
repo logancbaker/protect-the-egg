@@ -5,6 +5,7 @@ A browser remake of an iPhone game from 2008. Hold your phone sideways and flat,
 - 5 lasers, one reloads every second, plus one more for each level you clear from level 3 on
 - Reloads speed up to 0.75 seconds at level 8 and 0.5 seconds at level 12
 - Colored balls take more than one hit
+- Every level has a Clear Goal timer: beat it to earn an Eggs-tra Life (up to 5 eggs)
 - Screen edges wrap around, like Asteroids
 
 **Play:** open `index.html` in a browser, or visit the GitHub Pages link. On a phone, allow motion access when asked, and use "Add to Home Screen" to launch it full-screen.

@@ -35,6 +35,12 @@ body{font-family:var(--ui);-webkit-user-select:none;user-select:none;-webkit-tou
 .stat{display:grid;gap:6px}
 .score{font-family:var(--display);font-size:1.6rem;line-height:1;letter-spacing:.02em;color:var(--shell)}
 .lvl{font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);font-weight:700}
+.goal{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--shell)}
+.goal-label{color:var(--yolk)}
+.goal.hurry #goalTime{color:var(--laser);animation:blink .5s steps(2) infinite}
+.goal.missed{color:var(--dim);text-decoration:line-through;opacity:.6}
+.goal.missed .goal-label{color:var(--dim)}
+@keyframes blink{50%{opacity:.35}}
 .ammo{display:flex;flex-wrap:wrap;gap:5px;align-items:center;max-width:189px}
 .pip{position:relative;width:16px;height:7px;border-radius:4px;background:rgba(255,61,110,.18);overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,61,110,.45)}
 .pip i{position:absolute;inset:0;width:var(--f,0%);background:var(--laser);box-shadow:0 0 8px var(--laser)}
@@ -114,6 +120,7 @@ h2{font-family:var(--display);font-weight:400;font-size:1.7rem;line-height:1;mar
   <div class="stat">
     <div class="score" id="score">0</div>
     <div class="lvl" id="lvl">Level 1</div>
+    <div class="goal" id="goal"><span class="goal-label">Goal</span> <span id="goalTime">0:00</span></div>
     <div class="ammo" id="ammo" aria-label="Lasers">
     </div>
   </div>
@@ -135,8 +142,9 @@ h2{font-family:var(--display);font-weight:400;font-size:1.7rem;line-height:1;mar
     <li><b>Move</b><span id="moveHint">Turn your phone sideways, hold it flat, and tilt to roll the egg.</span></li>
     <li><b>Shoot</b><span id="shootHint">Tap anywhere to fire from the pointy end.</span></li>
     <li><b>Aim</b><span id="aimHint">Press and hold. The point turns toward your finger.</span></li>
-    <li><b>Lasers</b><span>Five shots, one reloads every second. Clear level 3 and up to earn more. Reloads speed up at levels 8 and 12.</span></li>
+    <li><b>Lasers</b><span>Five shots, one reloads every second. Earn more from level 3; reloads speed up at 8 and 12.</span></li>
     <li><b>Balls</b><span>Clear them all. Colored balls take more hits. One touch cracks you.</span></li>
+    <li><b>Goal</b><span>Clear a level before its timer runs out to earn an Eggs-tra Life.</span></li>
   </ul>
   <div class="actions">
     <button class="cta" id="startBtn" type="button">Start</button>
@@ -202,6 +210,8 @@ document.body.appendChild(probe);
 const SA = { Top:0, Right:0, Bottom:0, Left:0 };
 function layoutStage(){
   const vw = innerWidth, vh = innerHeight;
+  // A hidden or collapsing window can briefly report zero size; keep the last good layout
+  if (!vw || !vh) return false;
   turned = coarse && vh > vw;
   const cs = getComputedStyle(probe), i = k => parseFloat(cs['padding' + k]) || 0;
   if (turned){
@@ -216,12 +226,13 @@ function layoutStage(){
   for (const [k, v] of Object.entries(SA)) stage.style.setProperty('--sa-' + k[0].toLowerCase(), v + 'px');
   W = turned ? vh : vw; H = turned ? vw : vh;
   stage.classList.toggle('short', W > H && H <= 520);
+  return true;
 }
 // Screen coordinates to game coordinates
 const toGame = (cx, cy) => turned ? { x: cy, y: innerWidth - cx } : { x: cx, y: cy };
 function resize(){
   DPR = Math.min(2, window.devicePixelRatio || 1);
-  layoutStage();
+  if (!layoutStage()) return;
   cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
   ctx.setTransform(DPR,0,0,DPR,0,0);
   U = Math.max(.8, Math.min(1.5, Math.min(W, H) / 400));
@@ -288,6 +299,7 @@ const sfx = {
   hit(){ noise(.08, .25, 2400); tone(500, 300, .06, 'triangle', .06); },
   pop(){ noise(.22, .35, 1600); tone(700, 90, .2, 'sine', .12); },
   crack(){ noise(.5, .5, 900); tone(220, 40, .5, 'sawtooth', .08); },
+  life(){ [523,659,784,1047,1319,1568].forEach((f,i) => setTimeout(() => tone(f, f*1.01, .2, 'square', .06), i*70)); },
   level(){ [523,659,784,1047].forEach((f,i) => setTimeout(() => tone(f, f*1.01, .16, 'triangle', .08), i*90)); },
 };
 
@@ -691,10 +703,21 @@ function describe(level){
   const tougher = level >= 2 ? (level >= 6 ? 'Tough shells everywhere' : 'Some balls take extra hits') : 'One hit each';
   const lasers = maxAmmo() > BASE_AMMO ? ` · ${maxAmmo()} lasers` : '';
   const faster = reloadTime(level) < reloadTime(level - 1) ? ` · Reload ${reloadTime(level)}s` : '';
-  return `${Math.min(3+level,18)} balls · ${tougher}${lasers}${faster}`;
+  return `${Math.min(3+level,18)} balls · ${tougher}${lasers}${faster} · Goal ${clock(goalFor(S.balls))}`;
 }
+// Clear Goal: about 8 seconds to get going plus time per hit needed, a little less per hit as reloads
+// speed up, and never less than the reload math allows. Beat it to earn an Eggs-tra Life.
+const MAX_LIVES = 5;
+function goalFor(balls){
+  const hits = balls.reduce((n, b) => n + b.hp, 0), r = reloadTime();
+  const byHits = 8 + hits * (.9 + .7*r);
+  const byReload = 8 + Math.max(0, hits - maxAmmo()) * r * 1.4;
+  return Math.ceil(Math.max(byHits, byReload));
+}
+const clock = t => { t = Math.max(0, Math.ceil(t)); return `${Math.floor(t/60)}:${String(t % 60).padStart(2, '0')}`; };
 function startLevel(){
   S.balls = spawnBalls(S.level, S.egg);
+  S.goal = S.goalLeft = goalFor(S.balls);
   S.bullets = [];
   S.egg.inv = Math.max(S.egg.inv, 1.4);
   banner(`Level ${S.level}`, describe(S.level));
@@ -797,7 +820,7 @@ function updateHud(){
   if (S.score !== lastScore){ $('score').textContent = S.score.toLocaleString(); lastScore = S.score; }
   if (S.level !== lastLevel){ $('lvl').textContent = `Level ${S.level} · ${S.balls.length} left`; lastLevel = S.level; }
   if (S.lives !== lastLives){
-    $('lives').innerHTML = Array.from({length:3}, (_,i) => `<div class="life${i < S.lives ? '' : ' lost'}"></div>`).join('');
+    $('lives').innerHTML = Array.from({length:Math.max(3, S.lives)}, (_,i) => `<div class="life${i < S.lives ? '' : ' lost'}"></div>`).join('');
     lastLives = S.lives;
   }
 }
@@ -810,6 +833,10 @@ function hudFrame(){
   });
   if (S.balls.length !== lastLeft){ lastLeft = S.balls.length; $('lvl').textContent = `Level ${S.level} · ${S.balls.length} left`; }
   $('recenter').hidden = !tiltOn();
+  const g = $('goal'), left = S.goalLeft || 0;
+  $('goalTime').textContent = left > 0 ? clock(left) : 'missed';
+  g.classList.toggle('missed', left <= 0);
+  g.classList.toggle('hurry', left > 0 && left <= 5);
 }
 
 /* ---------- update ---------- */
@@ -883,11 +910,25 @@ function update(dt){
     }
   }
 
+  if (playing && S.goalLeft > 0){
+    S.goalLeft -= dt;
+    if (S.goalLeft <= 0){ S.goalLeft = 0; sfx.empty(); }
+  }
+
   if (playing && S.balls.length === 0){
     S.mode = 'clear'; S.timer = 1.8;
     const bonus = 250*S.level; S.score += bonus;
-    banner('Cleared', `+${bonus.toLocaleString()} bonus` + (S.level >= 3 ? ' · +1 laser' : ''));
-    sfx.level(); buzz([20,40,20]);
+    const extras = `+${bonus.toLocaleString()} bonus` + (S.level >= 3 ? ' · +1 laser' : '');
+    if (S.goalLeft > 0){
+      S.timer = 2.4;
+      const took = clock(S.goal - S.goalLeft);
+      if (S.lives < MAX_LIVES){ S.lives++; banner('Eggs-tra Life!', `Cleared in ${took} · ${extras}`); }
+      else { S.score += 1000; banner('Eggs-tra Bonus!', `Cleared in ${took} · Eggs full, +1,000 · ${extras}`); }
+      sfx.life(); buzz([20,30,20,30,60]);
+    } else {
+      banner('Cleared', extras);
+      sfx.level(); buzz([20,40,20]);
+    }
   }
 
   if (S.mode === 'clear'){ S.timer -= dt; if (S.timer <= 0){ S.level++; S.mode = 'play'; S.ammo = maxAmmo(); startLevel(); } }
@@ -1034,11 +1075,12 @@ function draw(){
 /* ---------- loop ---------- */
 let last = performance.now();
 function frame(now){
+  requestAnimationFrame(frame);       // scheduled first, so one bad frame can never stop the game
   const dt = Math.min(.033, (now - last)/1000); last = now;
+  if (!W || !H || !bg){ resize(); return; }
   if (S.mode !== 'paused') update(dt);
   draw();
   if (S.mode === 'play' || S.mode === 'clear' || S.mode === 'dying') hudFrame();
-  requestAnimationFrame(frame);
 }
 
 /* ---------- wiring ---------- */
