@@ -3,6 +3,7 @@
 A browser remake of an iPhone game from 2008. Hold your phone sideways and flat, tilt to roll the egg, tap to fire lasers from its pointy end, and clear every ball before one cracks you. Press and hold to turn the egg's point toward your finger.
 
 - 5 lasers, one reloads every second, plus one more for each level you clear from level 3 on
+- Reloads speed up to 0.75 seconds at level 8 and 0.5 seconds at level 12
 - Colored balls take more than one hit
 - Screen edges wrap around, like Asteroids
 

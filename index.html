@@ -135,7 +135,7 @@ h2{font-family:var(--display);font-weight:400;font-size:1.7rem;line-height:1;mar
     <li><b>Move</b><span id="moveHint">Turn your phone sideways, hold it flat, and tilt to roll the egg.</span></li>
     <li><b>Shoot</b><span id="shootHint">Tap anywhere to fire from the pointy end.</span></li>
     <li><b>Aim</b><span id="aimHint">Press and hold. The point turns toward your finger.</span></li>
-    <li><b>Lasers</b><span>Five shots, one reloads every second. Clear level 3 and up to earn more.</span></li>
+    <li><b>Lasers</b><span>Five shots, one reloads every second. Clear level 3 and up to earn more. Reloads speed up at levels 8 and 12.</span></li>
     <li><b>Balls</b><span>Clear them all. Colored balls take more hits. One touch cracks you.</span></li>
   </ul>
   <div class="actions">
@@ -188,7 +188,9 @@ const HP = [
   ['#ffd4b8','#ff7a2e','#7f2800'],
   ['#efd6ff','#b45cff','#43177a'],
 ];
-const BASE_AMMO = 5, RELOAD = 1.0;
+const BASE_AMMO = 5;
+// Seconds to reload one laser: 1 to start, 0.75 from level 8, 0.5 from level 12.
+const reloadTime = (level = S.level) => level >= 12 ? .5 : level >= 8 ? .75 : 1;
 // Clearing level 3 earns a 6th laser, level 4 a 7th, and so on.
 const maxAmmo = () => BASE_AMMO + Math.max(0, S.level - 3);
 
@@ -688,7 +690,8 @@ function spawnBalls(level, avoid){
 function describe(level){
   const tougher = level >= 2 ? (level >= 6 ? 'Tough shells everywhere' : 'Some balls take extra hits') : 'One hit each';
   const lasers = maxAmmo() > BASE_AMMO ? ` · ${maxAmmo()} lasers` : '';
-  return `${Math.min(3+level,18)} balls · ${tougher}${lasers}`;
+  const faster = reloadTime(level) < reloadTime(level - 1) ? ` · Reload ${reloadTime(level)}s` : '';
+  return `${Math.min(3+level,18)} balls · ${tougher}${lasers}${faster}`;
 }
 function startLevel(){
   S.balls = spawnBalls(S.level, S.egg);
@@ -802,7 +805,7 @@ let lastLeft = -1;
 function hudFrame(){
   buildPips();
   pips.forEach((p, i) => {
-    const f = i < Math.floor(S.ammo) ? 100 : (i === Math.floor(S.ammo) ? S.reload/RELOAD*30 : 0);
+    const f = i < Math.floor(S.ammo) ? 100 : (i === Math.floor(S.ammo) ? S.reload/reloadTime()*30 : 0);
     p.style.setProperty('--f', f + '%');
   });
   if (S.balls.length !== lastLeft){ lastLeft = S.balls.length; $('lvl').textContent = `Level ${S.level} · ${S.balls.length} left`; }
@@ -843,7 +846,7 @@ function update(dt){
   }
 
   if (playing){
-    if (S.ammo < maxAmmo()){ S.reload += dt; if (S.reload >= RELOAD){ S.ammo++; S.reload -= RELOAD; } }
+    if (S.ammo < maxAmmo()){ S.reload += dt; if (S.reload >= reloadTime()){ S.ammo++; S.reload -= reloadTime(); } }
     else S.reload = 0;
   }
 
